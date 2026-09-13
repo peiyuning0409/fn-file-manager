@@ -9,8 +9,10 @@ let selectedPath = null;
 let clipboard = null;
 let searchMode = false;
 let volumeNames = {};       // vol key -> 友好名
-let viewMode = localStorage.getItem('fnfm_view') || 'grid';
+let viewMode = localStorage.getItem('fnfm_view') || 'list';
 let filterType = 'all';
+let navHistory = [];
+let navIndex = -1;
 const IS_MOBILE = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 const $ = (id) => document.getElementById(id);
@@ -140,7 +142,7 @@ function iconFor(name, type, size) {
 }
 
 /* ---------- 目录加载 ---------- */
-async function loadDir(path) {
+async function loadDir(path, recordHistory = true) {
   try {
     if (!path) {
       const res = await api('/api/volumes');
@@ -152,7 +154,9 @@ async function loadDir(path) {
       $('search-input').value = '';
       renderBreadcrumb('');
       renderVolumes(data.volumes || []);
+      renderSidebar(data.volumes || []);
       setToolbarEnabled(false);
+      if (recordHistory) recordNav('');
       return;
     }
     const res = await api('/api/list?path=' + encodeURIComponent(path));
@@ -165,9 +169,26 @@ async function loadDir(path) {
     renderBreadcrumb(data.path);
     renderList(data.entries);
     setToolbarEnabled(true);
+    if (recordHistory) recordNav(data.path);
   } catch (e) {
     toast('加载失败：' + e.message, true);
   }
+}
+
+function recordNav(path) {
+  navHistory = navHistory.slice(0, navIndex + 1);
+  if (navHistory[navIndex] !== path) {
+    navHistory.push(path);
+    navIndex = navHistory.length - 1;
+  }
+  updateNavButtons();
+}
+function updateNavButtons() {
+  const back = $('btn-back'), fwd = $('btn-forward');
+  back.disabled = navIndex <= 0;
+  fwd.disabled = navIndex >= navHistory.length - 1;
+  back.style.opacity = back.disabled ? '0.4' : '1';
+  fwd.style.opacity = fwd.disabled ? '0.4' : '1';
 }
 
 /* 文件夹大小：懒加载（只计算滚动到视口内的文件夹，避免大目录卡顿） */
@@ -672,7 +693,7 @@ $('search-input').addEventListener('keydown', async (e) => {
   }).join('');
 });
 
-$('btn-refresh').addEventListener('click', () => { _dirSizeCache.clear(); loadDir(currentPath); });
+$('btn-refresh').addEventListener('click', () => { _dirSizeCache.clear(); loadDir(currentPath, false); });
 
 /* ---------- 弹窗 ---------- */
 function openModal(title, bodyHtml, actions) {
@@ -755,6 +776,20 @@ function setView(mode) {
 $('view-grid').addEventListener('click', () => setView('grid'));
 $('view-list').addEventListener('click', () => setView('list'));
 setView(viewMode);
+
+/* ---------- 前进/后退导航 ---------- */
+$('btn-back').addEventListener('click', () => {
+  if (navIndex <= 0) return;
+  navIndex--;
+  updateNavButtons();
+  loadDir(navHistory[navIndex] || '', false);
+});
+$('btn-forward').addEventListener('click', () => {
+  if (navIndex >= navHistory.length - 1) return;
+  navIndex++;
+  updateNavButtons();
+  loadDir(navHistory[navIndex] || '', false);
+});
 
 /* ---------- 快捷筛选 ---------- */
 document.querySelectorAll('.side-item[data-filter]').forEach((el) => {

@@ -249,6 +249,7 @@ function renderBreadcrumb(path) {
 function renderVolumes(vols) {
   vols.forEach((v) => { volumeNames[v.path] = v.name; });
   const wrap = $('file-list');
+  wrap.className = 'file-list';  // 防止套在上一次切到网格视图的窄列里
   if (!vols.length) { wrap.innerHTML = '<div class="empty">未检测到存储空间</div>'; return; }
   wrap.innerHTML = vols.map((v) => {
     const pct = Math.min(100, Math.max(0, v.usePct || 0));

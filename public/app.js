@@ -360,7 +360,7 @@ function initListDelegation() {
   const wrap = $('file-list');
   let pressTimer = null;
   wrap.addEventListener('touchstart', (e) => {
-    const item = e.target.closest('.file-item');
+    const item = e.target.closest('.file-item, .grid-item');
     if (!item) return;
     pressTimer = setTimeout(() => {
       const rel = item.dataset.path, type = item.dataset.type;
@@ -375,7 +375,7 @@ function initListDelegation() {
   wrap.addEventListener('click', (e) => {
     if (e.target.closest('.file-actions')) {
       const btn = e.target.closest('.mini-btn');
-      const item = e.target.closest('.file-item');
+      const item = e.target.closest('.file-item, .grid-item');
       if (btn && item) {
         e.stopPropagation();
         const rel = item.dataset.path, type = item.dataset.type;
@@ -388,12 +388,12 @@ function initListDelegation() {
       }
       return;
     }
-    const item = e.target.closest('.file-item');
+    const item = e.target.closest('.file-item, .grid-item');
     if (item) select(item.dataset.path, item.dataset.type);
   });
 
   wrap.addEventListener('dblclick', (e) => {
-    const item = e.target.closest('.file-item');
+    const item = e.target.closest('.file-item, .grid-item');
     if (!item) return;
     const rel = item.dataset.path, type = item.dataset.type;
     const name = rel.split('/').pop();
@@ -403,7 +403,7 @@ function initListDelegation() {
   });
 
   wrap.addEventListener('contextmenu', (e) => {
-    const item = e.target.closest('.file-item');
+    const item = e.target.closest('.file-item, .grid-item');
     if (!item) return;
     e.preventDefault(); e.stopPropagation();
     const rel = item.dataset.path, type = item.dataset.type;
@@ -633,7 +633,7 @@ function showContextMenu(x, y, rel, type, name) {
 function hideContextMenu() { $('context-menu').style.display = 'none'; }
 
 document.querySelector('.content').addEventListener('contextmenu', (e) => {
-  if (e.target.closest('.file-item') || e.target.closest('.vol-card')) return;
+  if (e.target.closest('.file-item, .grid-item') || e.target.closest('.vol-card')) return;
   e.preventDefault();
   const menu = $('context-menu');
   let html = '';

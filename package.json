@@ -1,0 +1,12 @@
+{
+  "name": "fn-file-manager",
+  "version": "2.0.0",
+  "description": "飞牛NAS专属文件资源管理器 - 深空蓝毛玻璃质感",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1"
+  }
+}

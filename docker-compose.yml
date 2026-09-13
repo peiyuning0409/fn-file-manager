@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  fn-file-manager:
+    build: .
+    image: fn-file-manager:latest
+    container_name: fn-file-manager
+    restart: always
+    ports:
+      - "8888:8888"
+    environment:
+      - PORT=8888
+      - ROOT=/data
+      - PASSWORD=${PASSWORD:-changeme}
+    volumes:
+      - /vol1/1000:/data/vol1
+      - /vol2/1000:/data/vol2
+    user: "1000:1001"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

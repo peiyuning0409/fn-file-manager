@@ -28,6 +28,14 @@ const VOLUMES = [
 // 上传时限制单文件最大字节数（0 = 不限制）
 const MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE || '0', 10);
 
+// 列表/大小结果缓存（目录 mtime 变化自动失效），大幅减少大目录重复扫盘
+const _listCache = new Map();
+const _sizeCache = new Map();
+const LIST_CACHE_TTL = 2000;   // 列表缓存 2 秒
+const SIZE_CACHE_TTL = 30000;  // 文件夹大小缓存 30 秒
+const _collator = new Intl.Collator('zh-CN');  // 复用排序器，localeCompare 慢很多
+function _cacheTrim(map, max) { if (map.size > max) map.delete(map.keys().next().value); }
+
 const MIME = {
   '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
@@ -114,6 +122,13 @@ async function handleList(req, res, q) {
   try { st = await fsp.stat(target); } catch (e) { return sendJSON(res, 404, { ok: false, error: '路径不存在' }); }
   if (!st.isDirectory()) return sendJSON(res, 400, { ok: false, error: '不是目录' });
 
+  // 命中缓存：目录 mtime 未变且未过期，直接返回（大目录重复进出不再重扫）
+  const cached = _listCache.get(target);
+  const now = Date.now();
+  if (cached && cached.mtime === st.mtimeMs && (now - cached.time) < LIST_CACHE_TTL) {
+    return sendJSON(res, 200, cached.data);
+  }
+
   let dirents;
   try { dirents = await fsp.readdir(target, { withFileTypes: true }); } catch (e) { return sendJSON(res, 500, { ok: false, error: '读取失败: ' + e.message }); }
 
@@ -130,8 +145,11 @@ async function handleList(req, res, q) {
     } catch (e) { return null; }
   }));
   const entries = items.filter(Boolean);
-  entries.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name, 'zh-CN') : (a.type === 'dir' ? -1 : 1)));
-  sendJSON(res, 200, { ok: true, path: toRel(target), parent: toRel(path.dirname(target)), entries });
+  entries.sort((a, b) => (a.type === b.type ? _collator.compare(a.name, b.name) : (a.type === 'dir' ? -1 : 1)));
+  const payload = { ok: true, path: toRel(target), parent: toRel(path.dirname(target)), entries };
+  _listCache.set(target, { time: now, mtime: st.mtimeMs, data: payload });
+  _cacheTrim(_listCache, 300);
+  sendJSON(res, 200, payload);
 }
 
 /** 存储空间列表（含容量） */
@@ -162,10 +180,18 @@ async function handleVolumes(req, res) {
 async function handleSize(req, res, q) {
   const target = resolveSafe(q.get('path') || '');
   if (target === null) return sendJSON(res, 400, { ok: false, error: '非法路径' });
+  let st;
   try {
-    const st = await fsp.lstat(target);
+    st = await fsp.lstat(target);
     if (!st.isDirectory()) return sendJSON(res, 200, { ok: true, size: st.size, files: 1, dirs: 0 });
   } catch (e) { return sendJSON(res, 404, { ok: false, error: '路径不存在' }); }
+
+  // 命中缓存：目录 mtime 未变且未过期（避免重复递归扫盘）
+  const cached = _sizeCache.get(target);
+  const now = Date.now();
+  if (cached && cached.mtime === st.mtimeMs && (now - cached.time) < SIZE_CACHE_TTL) {
+    return sendJSON(res, 200, cached.data);
+  }
 
   let totalSize = 0, fileCount = 0, dirCount = 0;
   const MAX_FILES = 200000;
@@ -195,13 +221,16 @@ async function handleSize(req, res, q) {
       queue.push(...subDirs);
     }));
   }
-  sendJSON(res, 200, {
+  const payload = {
     ok: true,
     size: totalSize,
     files: fileCount,
     dirs: dirCount,
     truncated: fileCount >= MAX_FILES,
-  });
+  };
+  _sizeCache.set(target, { time: now, mtime: st.mtimeMs, data: payload });
+  _cacheTrim(_sizeCache, 200);
+  sendJSON(res, 200, payload);
 }
 
 async function handleUpload(req, res, q) {
@@ -475,10 +504,16 @@ const server = http.createServer(async (req, res) => {
       const staticFile = pathname === '/' ? '/index.html' : pathname;
       if (staticFile === '/index.html' || staticFile === '/style.css' || staticFile === '/app.js' || staticFile === '/favicon.svg') {
         const fp = path.join(__dirname, 'public', staticFile);
-        fs.readFile(fp, (err, data) => {
+        fs.stat(fp, (err, st) => {
           if (err) { res.writeHead(404); return res.end(); }
-          res.writeHead(200, { 'Content-Type': staticFile === '/index.html' ? 'text/html; charset=utf-8' : staticFile === '/style.css' ? 'text/css; charset=utf-8' : staticFile === '/app.js' ? 'text/javascript; charset=utf-8' : 'image/svg+xml', 'Cache-Control': 'no-cache' });
-          res.end(data);
+          const etag = `"${st.size}-${Math.floor(st.mtimeMs)}"`;
+          if (req.headers['if-none-match'] === etag) { res.writeHead(304); return res.end(); }
+          const ct = staticFile === '/index.html' ? 'text/html; charset=utf-8' : staticFile === '/style.css' ? 'text/css; charset=utf-8' : staticFile === '/app.js' ? 'text/javascript; charset=utf-8' : 'image/svg+xml';
+          fs.readFile(fp, (err2, data) => {
+            if (err2) { res.writeHead(404); return res.end(); }
+            res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': 'no-cache', 'ETag': etag });
+            res.end(data);
+          });
         });
         return;
       }

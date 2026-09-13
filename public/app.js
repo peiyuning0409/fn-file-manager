@@ -337,8 +337,12 @@ function renderGridItem(e) {
   const isDir = e.type === 'dir';
   const sel = selectedPath === rel ? ' selected' : '';
   const meta = isDir ? '<span class="grid-size">—</span>' : `<span class="grid-size">${fmtSize(e.size)}</span>`;
+  const isImg = !isDir && isImage(e.name);
+  const thumb = isImg
+    ? `<div class="grid-thumb"><img src="/api/download?path=${encodeURIComponent(rel)}&token=${encodeURIComponent(TOKEN)}&inline=1" loading="lazy" alt="${esc(e.name)}" draggable="false"></div>`
+    : `<div class="grid-icon">${iconFor(e.name, e.type, 44)}</div>`;
   return `<div class="grid-item${sel}" data-path="${esc(rel)}" data-type="${e.type}">
-    <div class="grid-icon">${iconFor(e.name, e.type, 44)}</div>
+    ${thumb}
     <div class="grid-name">${esc(e.name)}</div>
     <div class="grid-meta">${meta}</div>
   </div>`;

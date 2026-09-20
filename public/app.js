@@ -629,7 +629,8 @@ function showContextMenu(x, y, rel, type, name) {
   menu.style.display = 'block';
   menu.style.left = Math.min(x, window.innerWidth - 190) + 'px';
   menu.style.top = Math.min(y, window.innerHeight - menu.offsetHeight - 10) + 'px';
-  menu.querySelectorAll('.ctx-item').forEach((el, i) => el.addEventListener('click', () => { hideContextMenu(); items[i].fn(); }));
+  const actions = items.filter((it) => it !== 'sep');
+  menu.querySelectorAll('.ctx-item').forEach((el, i) => el.addEventListener('click', () => { hideContextMenu(); actions[i].fn(); }));
 }
 function hideContextMenu() { $('context-menu').style.display = 'none'; }
 
